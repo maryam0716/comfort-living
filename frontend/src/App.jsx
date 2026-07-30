@@ -37,6 +37,7 @@ const AdminCouponsPage = lazy(() => import('./pages/admin/AdminCouponsPage'))
 const AdminReviewsPage = lazy(() => import('./pages/admin/AdminReviewsPage'))
 const AdminCmsPage = lazy(() => import('./pages/admin/AdminCmsPage'))
 const AdminHomePage = lazy(() => import('./pages/admin/AdminHomePage'))
+const AdminSiteContentPage = lazy(() => import('./pages/admin/AdminSiteContentPage'))
 const AdminAboutPage = lazy(() => import('./pages/admin/AdminAboutPage'))
 const AdminBannersPage = lazy(() => import('./pages/admin/AdminBannersPage'))
 const AdminFaqsPage = lazy(() => import('./pages/admin/AdminFaqsPage'))
@@ -107,6 +108,7 @@ function App() {
 
           {/* CMS module */}
           <Route path="cms/home" element={<Suspense fallback={<AdminFallback />}><AdminHomePage /></Suspense>} />
+          <Route path="cms/home-content" element={<Suspense fallback={<AdminFallback />}><AdminSiteContentPage /></Suspense>} />
           <Route path="cms/about" element={<Suspense fallback={<AdminFallback />}><AdminAboutPage /></Suspense>} />
           <Route path="cms/pages" element={<Suspense fallback={<AdminFallback />}><AdminCmsPage /></Suspense>} />
           <Route path="cms/banners" element={<Suspense fallback={<AdminFallback />}><AdminBannersPage /></Suspense>} />

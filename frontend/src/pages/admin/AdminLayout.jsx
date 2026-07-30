@@ -2,7 +2,7 @@ import { NavLink, Outlet, useNavigate } from 'react-router-dom'
 import {
   FiGrid, FiBox, FiShoppingBag, FiLogOut, FiTag, FiFileText,
   FiImage, FiMail, FiStar, FiList, FiBell, FiSend, FiSettings,
-  FiHome, FiInfo, FiUsers, FiSearch, FiMessageSquare, FiLayers,
+  FiHome, FiInfo, FiUsers, FiSearch, FiMessageSquare, FiLayers, FiEdit3,
 } from 'react-icons/fi'
 import { useAdminAuth } from '../../context/AdminAuthContext'
 
@@ -17,6 +17,7 @@ const mainNav = [
 
 const cmsNav = [
   { to: '/admin/cms/home', label: 'Home Page', icon: FiHome },
+  { to: '/admin/cms/home-content', label: 'Homepage Content', icon: FiEdit3 },
   { to: '/admin/cms/about', label: 'About Us', icon: FiInfo },
   { to: '/admin/cms/pages', label: 'Other Pages', icon: FiFileText },
   { to: '/admin/cms/banners', label: 'Banners', icon: FiImage },

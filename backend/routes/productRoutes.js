@@ -25,6 +25,12 @@ const {
 
   restoreProduct,
 
+  permanentDeleteProduct,
+
+  deleteProductImage,
+
+  reorderProductImages,
+
   getFeaturedProducts,
 
   getBestSellerProducts,
@@ -106,6 +112,24 @@ router.patch(
   protect,
   adminOnly,
   restoreProduct
+);
+router.delete(
+  "/permanent/:id",
+  protect,
+  adminOnly,
+  permanentDeleteProduct
+);
+router.delete(
+  "/:id/images",
+  protect,
+  adminOnly,
+  deleteProductImage
+);
+router.patch(
+  "/:id/images/reorder",
+  protect,
+  adminOnly,
+  reorderProductImages
 );
 router.get(
   "/stats/dashboard",

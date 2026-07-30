@@ -2,8 +2,10 @@ import { useState, useEffect } from 'react'
 import { Link } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import { FiChevronLeft, FiChevronRight } from 'react-icons/fi'
+import { fetchSiteContent } from '../../services/siteContentService'
+import { resolveImageUrl } from '../../services/api'
 
-const slides = [
+const defaultSlides = [
   {
     id: 1,
     title: "Sleep in Pure Luxury",
@@ -38,17 +40,58 @@ const slides = [
 
 function HeroBanner() {
   const [current, setCurrent] = useState(0)
+  // Slides are editable from the admin CMS (Home Content). Start with no
+  // slides (instead of the built-in dummy ones) so nothing renders until
+  // we actually know what the admin has configured — otherwise the dummy
+  // slide flashes on screen for a moment before the real one swaps in.
+  const [slides, setSlides] = useState([])
+  const [loaded, setLoaded] = useState(false)
+
+  useEffect(() => {
+    fetchSiteContent()
+      .then((content) => {
+        const heroSlides = content?.hero?.slides
+        if (Array.isArray(heroSlides)) {
+          // Respect whatever the admin actually saved, including an
+          // intentionally empty list — don't silently replace it with
+          // the dummy slides just because it's empty.
+          setSlides(heroSlides.map((s, i) => ({
+            id: s.id || i + 1,
+            title: s.title || '',
+            subtitle: s.subtitle || '',
+            description: s.description || '',
+            cta: s.cta || 'Shop Now',
+            link: s.link || '/shop',
+            bg: s.bg || 'from-[#4a3728]/80 to-[#4a3728]/30',
+            image: s.image ? resolveImageUrl(s.image) : '',
+          })))
+        } else {
+          // Nothing has ever been saved for this block — use the
+          // built-in sample slides so a fresh install isn't blank.
+          setSlides(defaultSlides)
+        }
+      })
+      .catch(() => setSlides(defaultSlides))
+      .finally(() => setLoaded(true))
+  }, [])
 
   // Auto-slide every 5 seconds
   useEffect(() => {
+    if (slides.length === 0) return
     const timer = setInterval(() => {
       setCurrent(prev => (prev + 1) % slides.length)
     }, 5000)
     return () => clearInterval(timer)
-  }, [])
+  }, [slides.length])
 
   const prev = () => setCurrent(prev => (prev - 1 + slides.length) % slides.length)
   const next = () => setCurrent(prev => (prev + 1) % slides.length)
+
+  // Still loading, or the admin has intentionally left no slides
+  // configured — render an empty section instead of any dummy content.
+  if (!loaded || slides.length === 0) {
+    return <section className="relative h-[500px] md:h-[600px] lg:h-[680px] overflow-hidden bg-[#1a1a1a]" />
+  }
 
   return (
     <section className="relative h-[500px] md:h-[600px] lg:h-[680px] overflow-hidden">

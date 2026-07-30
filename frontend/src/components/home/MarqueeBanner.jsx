@@ -1,6 +1,8 @@
+import { useState, useEffect } from 'react'
 import { motion } from 'framer-motion'
+import { fetchSiteContent } from '../../services/siteContentService'
 
-const items = [
+const defaultItems = [
   ' Premium Bedsheets',
   ' Warm Blankets',
   ' Leather Bags',
@@ -15,6 +17,19 @@ const items = [
 ]
 
 function MarqueeBanner() {
+  const [items, setItems] = useState(defaultItems)
+
+  useEffect(() => {
+    fetchSiteContent()
+      .then((content) => {
+        const marqueeItems = content?.marquee?.items
+        if (Array.isArray(marqueeItems) && marqueeItems.length > 0) {
+          setItems(marqueeItems)
+        }
+      })
+      .catch(() => {})
+  }, [])
+
   return (
     <div className="bg-brand text-white py-3 overflow-hidden mb-2">
       <motion.div

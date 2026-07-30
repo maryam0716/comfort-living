@@ -1,10 +1,31 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { motion } from 'framer-motion'
 import { FiMail } from 'react-icons/fi'
+import { fetchSiteContent } from '../../services/siteContentService'
+
+const defaultContent = {
+  title: 'Get Exclusive Offers',
+  subtitle: 'Subscribe to our newsletter and get 10% off your first order plus early access to new arrivals.',
+}
 
 function Newsletter() {
   const [email, setEmail] = useState('')
   const [submitted, setSubmitted] = useState(false)
+  const [content, setContent] = useState(defaultContent)
+
+  useEffect(() => {
+    fetchSiteContent()
+      .then((data) => {
+        const block = data?.newsletter
+        if (block?.title || block?.subtitle) {
+          setContent({
+            title: block.title || defaultContent.title,
+            subtitle: block.subtitle || defaultContent.subtitle,
+          })
+        }
+      })
+      .catch(() => {})
+  }, [])
 
   const handleSubmit = (e) => {
     e.preventDefault()
@@ -28,10 +49,10 @@ function Newsletter() {
           </div>
 
           <h2 className="font-serif text-3xl md:text-4xl text-white font-bold mb-3">
-            Get Exclusive Offers
+            {content.title}
           </h2>
           <p className="text-secondary text-sm mb-8">
-            Subscribe to our newsletter and get 10% off your first order plus early access to new arrivals.
+            {content.subtitle}
           </p>
 
           {submitted ? (

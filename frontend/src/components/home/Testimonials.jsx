@@ -1,8 +1,12 @@
+import { useState, useEffect } from 'react'
 import { motion } from 'framer-motion'
 import { FiStar } from 'react-icons/fi'
 import { staggerContainer, fadeUp, revealText } from '../../utils/animations'
+import { fetchSiteContent } from '../../services/siteContentService'
 
-const testimonials = [
+const defaultHeading = { subtitle: 'Happy Customers', title: 'What Our Customers Say' }
+
+const defaultTestimonials = [
   {
     id: 1,
     name: "Ayesha Khan",
@@ -30,6 +34,30 @@ const testimonials = [
 ]
 
 function Testimonials() {
+  const [heading, setHeading] = useState(defaultHeading)
+  const [testimonials, setTestimonials] = useState(defaultTestimonials)
+
+  useEffect(() => {
+    fetchSiteContent()
+      .then((content) => {
+        const block = content?.testimonials
+        if (block?.subtitle || block?.title) {
+          setHeading({ subtitle: block.subtitle || defaultHeading.subtitle, title: block.title || defaultHeading.title })
+        }
+        if (Array.isArray(block?.items) && block.items.length > 0) {
+          setTestimonials(block.items.map((t, i) => ({
+            id: t.id || i + 1,
+            name: t.name || '',
+            location: t.location || '',
+            rating: Number(t.rating) || 5,
+            review: t.review || '',
+            product: t.product || '',
+          })))
+        }
+      })
+      .catch(() => {})
+  }, [])
+
   return (
     <section className="py-16 px-4 bg-accent">
       <div className="max-w-7xl mx-auto">
@@ -42,10 +70,10 @@ function Testimonials() {
           className="text-center mb-12"
         >
           <motion.p variants={revealText} className="text-primary text-sm uppercase tracking-widest font-medium mb-2">
-            Happy Customers
+            {heading.subtitle}
           </motion.p>
           <motion.h2 variants={revealText} className="font-serif text-3xl md:text-4xl text-brand font-bold">
-            What Our Customers Say
+            {heading.title}
           </motion.h2>
           <motion.div variants={fadeUp} className="w-16 h-0.5 bg-primary mx-auto mt-4" />
         </motion.div>

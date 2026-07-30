@@ -1,3 +1,5 @@
+const fs = require("fs");
+const path = require("path");
 const Product = require("../models/Product");
 const Category = require("../models/Category");
 const mapProduct = require("../utils/productMapper");
@@ -9,6 +11,21 @@ const {
   successResponse,
   errorResponse,
 } = require("../utils/response");
+
+// Best-effort removal of an uploaded file that lives at a "/uploads/xyz"
+// path. Never throws — a missing file (already removed, or a seeded/
+// external URL) must not block the surrounding delete/update operation.
+const removeUploadedFile = (relativePath) => {
+  try {
+    if (!relativePath || !relativePath.startsWith("/uploads/")) return;
+    const filePath = path.join(process.cwd(), relativePath);
+    if (fs.existsSync(filePath)) {
+      fs.unlinkSync(filePath);
+    }
+  } catch (error) {
+    console.error("Failed to remove uploaded file:", relativePath, error.message);
+  }
+};
 
 /*
 ==========================================
@@ -841,6 +858,196 @@ const restoreProduct = async (req, res) => {
   }
 
 };
+
+/*
+==========================================
+PERMANENT DELETE PRODUCT
+Fully removes the product document (freeing its slug/SKU so a product
+with the same title/SKU can be recreated without a duplicate-key error)
+and best-effort removes its uploaded image files from disk. Only meant
+to be used on a product that has already been soft-deleted, so this is
+a deliberate, unrecoverable action separate from the regular Delete.
+==========================================
+*/
+
+const permanentDeleteProduct = async (req, res) => {
+
+  try {
+
+    const product = await Product.findById(req.params.id);
+
+    if (!product) {
+      return errorResponse(res, "Product not found", 404);
+    }
+
+    const title = product.title;
+    const productId = product._id;
+    const sku = product.sku;
+
+    removeUploadedFile(product.thumbnail);
+    (product.images || []).forEach(removeUploadedFile);
+
+    await Product.findByIdAndDelete(req.params.id);
+
+    await createAuditLog({
+      req,
+      adminId: req.admin._id,
+      action: "DELETE",
+      module: "PRODUCT",
+      targetId: productId,
+      description: `Permanently deleted product ${title}`,
+      metadata: { productId, sku }
+    });
+
+    await createActivityLog({
+      type: "PRODUCT",
+      message: `Product "${title}" permanently deleted`,
+      referenceId: productId,
+      createdBy: req.admin._id,
+      metadata: { sku },
+    });
+
+    return successResponse(
+      res,
+      "Product permanently deleted"
+    );
+
+  } catch (error) {
+
+    return errorResponse(
+      res,
+      error.message
+    );
+
+  }
+
+};
+
+/*
+==========================================
+DELETE A SINGLE PRODUCT IMAGE
+Removes one image from the product's gallery (and, if it also happens
+to be the thumbnail, clears the thumbnail) and deletes the file from
+disk. Body: { image: "<image path>" }
+==========================================
+*/
+
+const deleteProductImage = async (req, res) => {
+
+  try {
+
+    const product = await Product.findById(req.params.id);
+
+    if (!product) {
+      return errorResponse(res, "Product not found", 404);
+    }
+
+    const { image } = req.body;
+
+    if (!image) {
+      return errorResponse(res, "Image path is required", 400);
+    }
+
+    if (!product.images.includes(image)) {
+      return errorResponse(res, "Image not found on this product", 404);
+    }
+
+    product.images = product.images.filter((img) => img !== image);
+
+    if (product.thumbnail === image) {
+      product.thumbnail = product.images[0] || "";
+    }
+
+    await product.save();
+    removeUploadedFile(image);
+
+    await createAuditLog({
+      req,
+      adminId: req.admin._id,
+      action: "UPDATE",
+      module: "PRODUCT",
+      targetId: product._id,
+      description: `Removed an image from product ${product.title}`,
+      metadata: { productId: product._id }
+    });
+
+    return successResponse(
+      res,
+      "Image deleted successfully",
+      mapProduct(product)
+    );
+
+  } catch (error) {
+
+    return errorResponse(
+      res,
+      error.message
+    );
+
+  }
+
+};
+
+/*
+==========================================
+REORDER PRODUCT IMAGES
+Body: { images: ["/uploads/a.jpg", "/uploads/b.jpg", ...] } — the full
+gallery in its new order. Validated to contain exactly the same set of
+images the product already has, so this endpoint can only reorder, not
+add/remove images.
+==========================================
+*/
+
+const reorderProductImages = async (req, res) => {
+
+  try {
+
+    const product = await Product.findById(req.params.id);
+
+    if (!product) {
+      return errorResponse(res, "Product not found", 404);
+    }
+
+    const { images } = req.body;
+
+    if (!Array.isArray(images) || images.length !== product.images.length) {
+      return errorResponse(res, "New image order must include every existing image exactly once", 400);
+    }
+
+    const currentSet = [...product.images].sort();
+    const newSet = [...images].sort();
+    const sameSet = currentSet.length === newSet.length &&
+      currentSet.every((img, i) => img === newSet[i]);
+
+    if (!sameSet) {
+      return errorResponse(res, "New image order must include every existing image exactly once", 400);
+    }
+
+    product.images = images;
+
+    if (!product.thumbnail || !images.includes(product.thumbnail)) {
+      product.thumbnail = images[0] || "";
+    }
+
+    await product.save();
+
+    return successResponse(
+      res,
+      "Image order updated successfully",
+      mapProduct(product)
+    );
+
+  } catch (error) {
+
+    return errorResponse(
+      res,
+      error.message
+    );
+
+  }
+
+};
+
 /*
 ==========================================
 GET CATEGORIES
@@ -1062,6 +1269,12 @@ module.exports = {
   deleteProduct,
 
   restoreProduct,
+
+  permanentDeleteProduct,
+
+  deleteProductImage,
+
+  reorderProductImages,
 
   getFeaturedProducts,
 

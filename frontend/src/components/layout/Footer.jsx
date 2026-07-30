@@ -1,5 +1,6 @@
 import { Link } from 'react-router-dom'
 import { FiFacebook, FiInstagram, FiMail, FiPhone, FiMapPin } from 'react-icons/fi'
+import { FaWhatsapp } from 'react-icons/fa'
 
 function Footer() {
   return (
@@ -25,9 +26,14 @@ function Footer() {
   className="bg-white/10 hover:bg-primary p-2 rounded-full transition-colors">
   <FiInstagram size={16} />
             </a>
-            <a href="mailto:info@comfortlivings.com"
+            <a href="mailto:info.cmfrt@gmail.com"
               className="bg-white/10 hover:bg-primary p-2 rounded-full transition-colors">
               <FiMail size={16} />
+            </a>
+            <a href="https://wa.me/923232222202" target="_blank" rel="noreferrer"
+              title="Chat with us on WhatsApp"
+              className="bg-white/10 hover:bg-[#25D366] p-2 rounded-full transition-colors">
+              <FaWhatsapp size={16} />
             </a>
           </div>
         </div>
@@ -93,7 +99,18 @@ function Footer() {
             </li>
             <li className="flex items-center gap-2 text-sm text-gray-400">
               <FiMail size={16} className="text-secondary shrink-0" />
-              info@comfortlivings.com
+              info.cmfrt@gmail.com
+            </li>
+            <li>
+              <a
+                href="https://wa.me/923232222202"
+                target="_blank"
+                rel="noreferrer"
+                className="inline-flex items-center gap-2 bg-[#25D366]/10 text-[#25D366] border border-[#25D366]/30 px-4 py-2 rounded-full text-sm font-medium hover:bg-[#25D366] hover:text-white transition-colors"
+              >
+                <FaWhatsapp size={16} />
+                Chat on WhatsApp
+              </a>
             </li>
           </ul>
         </div>

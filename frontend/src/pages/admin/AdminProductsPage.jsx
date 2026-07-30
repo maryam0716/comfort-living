@@ -1,12 +1,15 @@
 import { useState, useEffect } from 'react'
 import { useSearchParams, Link } from 'react-router-dom'
-import { FiPlus, FiEdit2, FiTrash2, FiRotateCcw, FiX } from 'react-icons/fi'
+import { FiPlus, FiEdit2, FiTrash2, FiRotateCcw, FiX, FiXCircle, FiMove } from 'react-icons/fi'
 import {
   fetchAdminProducts,
   createAdminProduct,
   updateAdminProduct,
   deleteAdminProduct,
   restoreAdminProduct,
+  permanentDeleteAdminProduct,
+  deleteAdminProductImage,
+  reorderAdminProductImages,
 } from '../../services/adminProductService'
 import { fetchAdminCategories } from '../../services/adminCategoryService'
 import { resolveImageUrl } from '../../services/adminApi'
@@ -28,6 +31,37 @@ function AdminProductsPage() {
   const [thumbnailFile, setThumbnailFile] = useState(null)
   const [imageFiles, setImageFiles] = useState([])
   const [saving, setSaving] = useState(false)
+  // Existing gallery images for the product currently being edited — kept
+  // separate from imageFiles (new uploads) so they can be deleted /
+  // reordered independently without touching the "add new images" input.
+  const [existingImages, setExistingImages] = useState([])
+  const [imageOrderDirty, setImageOrderDirty] = useState(false)
+  const [savingImageOrder, setSavingImageOrder] = useState(false)
+  const [dragIndex, setDragIndex] = useState(null)
+  // Drag index for reordering the newly-picked (not-yet-uploaded) gallery
+  // files — kept separate from `dragIndex` above, which is for the
+  // already-saved existing images, so the two lists don't interfere.
+  const [newImageDragIndex, setNewImageDragIndex] = useState(null)
+  // Local (not-yet-uploaded) preview URLs for the files currently picked
+  // in the thumbnail/gallery inputs, so the admin can see what they just
+  // selected right away instead of only finding out after saving.
+  const [thumbnailPreview, setThumbnailPreview] = useState('')
+  const [imagePreviews, setImagePreviews] = useState([])
+  const [saveMessage, setSaveMessage] = useState('')
+
+  useEffect(() => {
+    if (!thumbnailFile) { setThumbnailPreview(''); return }
+    const url = URL.createObjectURL(thumbnailFile)
+    setThumbnailPreview(url)
+    return () => URL.revokeObjectURL(url)
+  }, [thumbnailFile])
+
+  useEffect(() => {
+    if (!imageFiles.length) { setImagePreviews([]); return }
+    const urls = imageFiles.map((file) => URL.createObjectURL(file))
+    setImagePreviews(urls)
+    return () => urls.forEach((url) => URL.revokeObjectURL(url))
+  }, [imageFiles])
 
   const loadProducts = () => {
     setLoading(true)
@@ -56,6 +90,9 @@ function AdminProductsPage() {
     setFormData(emptyForm)
     setThumbnailFile(null)
     setImageFiles([])
+    setExistingImages([])
+    setImageOrderDirty(false)
+    setSaveMessage('')
     loadCategories()
     setShowForm(true)
   }
@@ -78,6 +115,9 @@ function AdminProductsPage() {
     })
     setThumbnailFile(null)
     setImageFiles([])
+    setExistingImages(product.images || [])
+    setImageOrderDirty(false)
+    setSaveMessage('')
     loadCategories()
     setShowForm(true)
   }
@@ -86,14 +126,24 @@ function AdminProductsPage() {
     e.preventDefault()
     setSaving(true)
     setError('')
+    setSaveMessage('')
     try {
       const payload = { ...formData }
+      let saved
       if (editingId) {
-        await updateAdminProduct(editingId, payload, { thumbnail: thumbnailFile, images: imageFiles })
+        saved = await updateAdminProduct(editingId, payload, { thumbnail: thumbnailFile, images: imageFiles })
       } else {
-        await createAdminProduct(payload, { thumbnail: thumbnailFile, images: imageFiles })
+        saved = await createAdminProduct(payload, { thumbnail: thumbnailFile, images: imageFiles })
       }
-      setShowForm(false)
+      // Keep the form open and reflect exactly what was saved (including
+      // the newly uploaded gallery photos) instead of closing right away —
+      // previously the admin had to reopen the product from the list just
+      // to confirm which photos actually got attached.
+      setEditingId(saved.id)
+      setExistingImages(saved.images || [])
+      setThumbnailFile(null)
+      setImageFiles([])
+      setSaveMessage(editingId ? 'Product updated — photos below reflect what was saved.' : 'Product created — photos below reflect what was saved.')
       loadProducts()
     } catch (err) {
       setError(err.message)
@@ -118,6 +168,82 @@ function AdminProductsPage() {
       loadProducts()
     } catch (err) {
       setError(err.message)
+    }
+  }
+
+  // Permanently removes the product (and its image files) so a product
+  // with the same title/SKU can be recreated afterward. Irreversible,
+  // so this is only offered for products already soft-deleted.
+  const handlePermanentDelete = async (id) => {
+    if (!confirm('Permanently delete this product? This cannot be undone and the product will be completely removed.')) return
+    try {
+      await permanentDeleteAdminProduct(id)
+      loadProducts()
+    } catch (err) {
+      setError(err.message)
+    }
+  }
+
+  const handleDeleteImage = async (image) => {
+    if (!editingId) return
+    if (!confirm('Remove this image from the product?')) return
+    try {
+      const updated = await deleteAdminProductImage(editingId, image)
+      setExistingImages(updated.images || [])
+      loadProducts()
+    } catch (err) {
+      setError(err.message)
+    }
+  }
+
+  const handleImageDragStart = (index) => setDragIndex(index)
+  const handleImageDragOver = (e) => e.preventDefault()
+  const handleImageDrop = (index) => {
+    if (dragIndex === null || dragIndex === index) return
+    setExistingImages((prev) => {
+      const next = [...prev]
+      const [moved] = next.splice(dragIndex, 1)
+      next.splice(index, 0, moved)
+      return next
+    })
+    setDragIndex(null)
+    setImageOrderDirty(true)
+  }
+
+  // Removes a not-yet-uploaded thumbnail selection (picked by mistake),
+  // so the admin doesn't have to re-select the whole file input.
+  const handleRemoveThumbnailFile = () => setThumbnailFile(null)
+
+  // Removes a single not-yet-uploaded gallery file, and lets the admin
+  // drag-reorder the pending files before they're uploaded.
+  const handleRemoveImageFile = (index) => {
+    setImageFiles((prev) => prev.filter((_, i) => i !== index))
+  }
+  const handleNewImageDragStart = (index) => setNewImageDragIndex(index)
+  const handleNewImageDragOver = (e) => e.preventDefault()
+  const handleNewImageDrop = (index) => {
+    if (newImageDragIndex === null || newImageDragIndex === index) return
+    setImageFiles((prev) => {
+      const next = [...prev]
+      const [moved] = next.splice(newImageDragIndex, 1)
+      next.splice(index, 0, moved)
+      return next
+    })
+    setNewImageDragIndex(null)
+  }
+
+  const handleSaveImageOrder = async () => {
+    if (!editingId) return
+    setSavingImageOrder(true)
+    setError('')
+    try {
+      await reorderAdminProductImages(editingId, existingImages)
+      setImageOrderDirty(false)
+      loadProducts()
+    } catch (err) {
+      setError(err.message)
+    } finally {
+      setSavingImageOrder(false)
     }
   }
 
@@ -150,6 +276,12 @@ function AdminProductsPage() {
               <FiX size={20} />
             </button>
           </div>
+
+          {saveMessage && (
+            <div className="bg-green-950 border border-green-800 text-green-400 text-sm rounded-xl px-4 py-3 mb-5">
+              {saveMessage}
+            </div>
+          )}
 
           <form onSubmit={handleSave} className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <input required placeholder="Product title" value={formData.title}
@@ -225,11 +357,98 @@ function AdminProductsPage() {
               <label className="text-xs text-gray-500 block mb-1">Thumbnail image</label>
               <input type="file" accept="image/*" onChange={(e) => setThumbnailFile(e.target.files[0])}
                 className="text-sm text-gray-300 w-full" />
+              {thumbnailPreview && (
+                <div className="relative w-16 mt-2">
+                  <img src={thumbnailPreview} alt="" className="w-16 h-16 rounded-lg object-cover border border-[#1e3a4a]" />
+                  <button
+                    type="button"
+                    onClick={handleRemoveThumbnailFile}
+                    title="Remove selected thumbnail"
+                    className="absolute -top-2 -right-2 bg-red-600 text-white rounded-full w-5 h-5 flex items-center justify-center hover:bg-red-500"
+                  >
+                    <FiXCircle size={14} />
+                  </button>
+                </div>
+              )}
             </div>
+
+            {editingId && existingImages.length > 0 && (
+              <div className="md:col-span-2">
+                <div className="flex items-center justify-between mb-1">
+                  <label className="text-xs text-gray-500">
+                    Existing images — drag to reorder, click ✕ to remove
+                  </label>
+                  {imageOrderDirty && (
+                    <button type="button" onClick={handleSaveImageOrder} disabled={savingImageOrder}
+                      className="text-xs bg-primary text-white px-3 py-1.5 rounded-lg font-medium hover:bg-opacity-90 transition-colors disabled:opacity-60">
+                      {savingImageOrder ? 'Saving order...' : 'Save order'}
+                    </button>
+                  )}
+                </div>
+                <div className="flex flex-wrap gap-3">
+                  {existingImages.map((img, index) => (
+                    <div
+                      key={img}
+                      draggable
+                      onDragStart={() => handleImageDragStart(index)}
+                      onDragOver={handleImageDragOver}
+                      onDrop={() => handleImageDrop(index)}
+                      className="relative group cursor-move"
+                      title="Drag to reorder"
+                    >
+                      <img src={resolveImageUrl(img)} alt="" className="w-20 h-20 rounded-lg object-cover border border-[#1e3a4a]" />
+                      <div className="absolute top-1 left-1 bg-black/60 text-white text-[10px] px-1.5 py-0.5 rounded">
+                        <FiMove size={10} className="inline -mt-0.5" />
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => handleDeleteImage(img)}
+                        title="Remove image"
+                        className="absolute -top-2 -right-2 bg-red-600 text-white rounded-full w-5 h-5 flex items-center justify-center hover:bg-red-500"
+                      >
+                        <FiXCircle size={14} />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
             <div>
               <label className="text-xs text-gray-500 block mb-1">Gallery images</label>
               <input type="file" accept="image/*" multiple onChange={(e) => setImageFiles(Array.from(e.target.files))}
                 className="text-sm text-gray-300 w-full" />
+              {imagePreviews.length > 0 && (
+                <>
+                  <p className="text-[11px] text-gray-600 mt-2 mb-1">Drag to reorder, click ✕ to remove a mistaken pick</p>
+                  <div className="flex flex-wrap gap-3">
+                    {imagePreviews.map((src, index) => (
+                      <div
+                        key={index}
+                        draggable
+                        onDragStart={() => handleNewImageDragStart(index)}
+                        onDragOver={handleNewImageDragOver}
+                        onDrop={() => handleNewImageDrop(index)}
+                        className="relative group cursor-move"
+                        title="Drag to reorder"
+                      >
+                        <img src={src} alt="" className="w-20 h-20 rounded-lg object-cover border border-[#1e3a4a]" />
+                        <div className="absolute top-1 left-1 bg-black/60 text-white text-[10px] px-1.5 py-0.5 rounded">
+                          <FiMove size={10} className="inline -mt-0.5" />
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => handleRemoveImageFile(index)}
+                          title="Remove this photo"
+                          className="absolute -top-2 -right-2 bg-red-600 text-white rounded-full w-5 h-5 flex items-center justify-center hover:bg-red-500"
+                        >
+                          <FiXCircle size={14} />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                </>
+              )}
             </div>
 
             <div className="md:col-span-2 flex gap-3 mt-2">
@@ -297,10 +516,16 @@ function AdminProductsPage() {
                           <FiTrash2 size={14} />
                         </button>
                       ) : (
-                        <button onClick={() => handleRestore(p.id)} title="Restore"
-                          className="p-2 rounded-lg bg-[#1e293b] text-gray-300 hover:bg-green-600 hover:text-white transition-colors">
-                          <FiRotateCcw size={14} />
-                        </button>
+                        <>
+                          <button onClick={() => handleRestore(p.id)} title="Restore"
+                            className="p-2 rounded-lg bg-[#1e293b] text-gray-300 hover:bg-green-600 hover:text-white transition-colors">
+                            <FiRotateCcw size={14} />
+                          </button>
+                          <button onClick={() => handlePermanentDelete(p.id)} title="Permanently delete"
+                            className="p-2 rounded-lg bg-[#1e293b] text-gray-300 hover:bg-red-700 hover:text-white transition-colors">
+                            <FiXCircle size={14} />
+                          </button>
+                        </>
                       )}
                     </div>
                   </td>

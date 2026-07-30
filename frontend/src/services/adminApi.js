@@ -66,6 +66,10 @@ export const adminApi = {
     request(path, { method: 'PUT', body: body instanceof FormData ? body : JSON.stringify(body) }),
   patch: (path, body) => request(path, { method: 'PATCH', body: JSON.stringify(body) }),
   delete: (path) => request(path, { method: 'DELETE' }),
+  // Same as delete(), but sends a JSON body — some admin endpoints (e.g.
+  // removing a single product image) need to identify which item to
+  // remove via the request body rather than the URL alone.
+  deleteWithBody: (path, body) => request(path, { method: 'DELETE', body: JSON.stringify(body) }),
 }
 
 export function resolveImageUrl(path) {
